@@ -7,17 +7,93 @@ import java.util.Random;
 import org.apache.commons.lang3.ArrayUtils;
 
 public class RobotPlayer {
-	public static MapLocation nearest(RobotController rc, RobotInfo[] others){
-    	MapLocation nearestLocation = others[0].location;
-    	int shortestDistanceSquared = rc.getLocation().distanceSquaredTo(others[0].location);
+	public static final int estimationSenseRange = 100;
+	public static int dangerosity(RobotController rc, MapLocation loc){
+		return rc.senseHostileRobots(loc,estimationSenseRange).length;
+	}
+	public static int friendliness(RobotController rc, MapLocation loc){
+		return rc.senseNearbyRobots(loc, estimationSenseRange, rc.getTeam()).length;
+	}
+	public static Direction averageDirection(Direction[] dirs){
+		int totaldx = 0, totaldy = 0;
+		for(Direction d : dirs){
+			totaldx += d.dx;
+			totaldy += d.dy;
+		}
+		return new MapLocation(0,0).directionTo(new MapLocation(totaldx, totaldy));
+	}
+	public static Direction averageDirectionToRobots(MapLocation here, RobotInfo[] robots){
+		int totaldx = 0, totaldy = 0;
+		for(RobotInfo r : robots){
+			Direction d = here.directionTo(r.location);
+			totaldx += d.dx;
+			totaldy += d.dy;
+		}
+		return new MapLocation(0,0).directionTo(new MapLocation(totaldx, totaldy));
+	}
+	public static Direction friendlyDirection(RobotController rc){
+		return averageDirectionToRobots(rc.getLocation(), rc.senseNearbyRobots(estimationSenseRange,rc.getTeam()));
+	}
+	public static Direction hostileDirection(RobotController rc){
+		return averageDirectionToRobots(rc.getLocation(), rc.senseHostileRobots(rc.getLocation(), estimationSenseRange));
+	}
+	public static RobotInfo nearest(MapLocation here, RobotInfo[] others){
+		if(others.length == 0)return null;
+    	int shortestI = 0;
+    	int shortestDistanceSquared = here.distanceSquaredTo(others[0].location);
     	for(int i = 1; i < others.length; i++){
-    		int newdist = rc.getLocation().distanceSquaredTo(others[i].location);
+    		int newdist = here.distanceSquaredTo(others[i].location);
     		if(shortestDistanceSquared > newdist){
     			shortestDistanceSquared = newdist;
-    			nearestLocation = others[i].location;
+    			shortestI = i;
     		}
     	}
-    	return nearestLocation;
+    	return others[shortestI];
+	}
+	public static MapLocation nearest(MapLocation here, MapLocation[] others){
+		if(others.length == 0)return null;
+    	int shortestI = 0;
+    	int shortestDistanceSquared = here.distanceSquaredTo(others[0]);
+    	for(int i = 1; i < others.length; i++){
+    		int newdist = here.distanceSquaredTo(others[i]);
+    		if(shortestDistanceSquared > newdist){
+    			shortestDistanceSquared = newdist;
+    			shortestI = i;
+    		}
+    	}
+    	return others[shortestI];
+	}
+	public static boolean squishMove(RobotController rc, Direction dir) throws GameActionException{
+		if(rc.canMove(dir))
+			rc.move(dir);
+		else if(rc.canMove(dir.rotateLeft()))
+			rc.move(dir.rotateLeft());
+		else if(rc.canMove(dir.rotateRight()))
+			rc.move(dir.rotateRight());
+		else if(rc.canMove(dir.rotateLeft().rotateLeft()))
+			rc.move(dir.rotateLeft().rotateLeft());
+		else if(rc.canMove(dir.rotateRight().rotateRight()))
+			rc.move(dir.rotateRight().rotateRight());
+		else
+			return false;
+		return true;
+	}
+	public static boolean squishMoveWithRubble(RobotController rc, Direction dir) throws GameActionException{
+		if(rc.canMove(dir))
+			rc.move(dir);
+		else if(rc.canMove(dir.rotateLeft()))
+			rc.move(dir.rotateLeft());
+		else if(rc.canMove(dir.rotateRight()))
+			rc.move(dir.rotateRight());
+		else if(rc.senseRubble(rc.getLocation().add(dir)) > GameConstants.RUBBLE_OBSTRUCTION_THRESH)
+			rc.clearRubble(dir);
+		else if(rc.senseRubble(rc.getLocation().add(dir.rotateLeft())) > GameConstants.RUBBLE_OBSTRUCTION_THRESH)
+			rc.clearRubble(dir.rotateLeft());
+		else if(rc.senseRubble(rc.getLocation().add(dir.rotateRight())) > GameConstants.RUBBLE_OBSTRUCTION_THRESH)
+			rc.clearRubble(dir.rotateRight());
+		else
+			return false;
+		return true;
 	}
 	
     /**
@@ -25,17 +101,17 @@ public class RobotPlayer {
      * If this method returns, the robot dies!
      **/
     public static void run(RobotController rc) {
+    	//todo - something based on ant behavior?
         // You can instantiate variables here.
         Direction[] directions = {Direction.NORTH, Direction.NORTH_EAST, Direction.EAST, Direction.SOUTH_EAST,
                 Direction.SOUTH, Direction.SOUTH_WEST, Direction.WEST, Direction.NORTH_WEST};
-        RobotType[] robotTypes = {RobotType.SOLDIER,
-                RobotType.GUARD, RobotType.GUARD, RobotType.VIPER, 
-                RobotType.TURRET, RobotType.TURRET, RobotType.TURRET, RobotType.TURRET};
+        RobotType[] robotTypes = {RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER,
+                RobotType.GUARD, RobotType.GUARD, RobotType.VIPER, RobotType.TURRET, RobotType.TURRET};
         Random rand = new Random(rc.getID());
-        int myAttackRange = 0;
+        int myAttackRange = rc.getType().attackRadiusSquared;
         Team myTeam = rc.getTeam();
         Team enemyTeam = myTeam.opponent();
-
+        
         if (rc.getType() == RobotType.ARCHON) {
             try {
                 // Any code here gets executed exactly once at the beginning of the game.
@@ -51,46 +127,35 @@ public class RobotPlayer {
                 // at the end of it, the loop will iterate once per game round.
                 try {
                     int fate = rand.nextInt(1000);
+                    boolean done = false;
                     
                     // Check if this ARCHON's core is ready
                     if (rc.isCoreReady()) {
-                    	RobotInfo[] neutralWithinRange = rc.senseNearbyRobots(2 /*adjacent squares*/,Team.NEUTRAL);
-                    	if(neutralWithinRange.length > 0)
-                    		rc.activate(neutralWithinRange[0].location);
+                    	RobotInfo[] hostiles = rc.senseHostileRobots(rc.getLocation(), 40);
+                    	if(hostiles.length > 0)
+                			done = squishMove(rc, nearest(rc.getLocation(),hostiles).location.directionTo(rc.getLocation()));
                     	
                     	int moveable = 0;
                     	for(Direction d : directions)
                     		if(rc.canMove(d))
                     			moveable++;
                     	
-                    	//RobotInfo[] hostiles = rc.senseHostileRobots(rc.getLocation(), 10);
-                    	//for(RobotInfo r : hostiles);//Of all moveable locations, which has the fewest nearby hostiles? Always run away.
-                    		//If can't run away, ... build turrets
-                    	
-                    	
-                        if (moveable <= 2 || fate < 800) {
+                    	RobotInfo[] neutralWithinRange = rc.senseNearbyRobots(2 /*adjacent squares*/,Team.NEUTRAL);
+                    	if(!done && neutralWithinRange.length > 0)
+                    		rc.activate(neutralWithinRange[0].location);
+                    	else if (!done && (moveable <= 2 || fate < (rc.getTeamParts()>300?900:600))) { //if over 300 parts, build more!
                             // Choose a random direction to try to move in, or look for parts
-                        	MapLocation[] locs1 = rc.sensePartLocations(10);
-                        	RobotInfo[] locs2 = rc.senseNearbyRobots(10,Team.NEUTRAL);
-                        	MapLocation minLoc = null;
-                        	int minDist = 12345;
-                        	for(MapLocation loc : locs1){
-                        		if(minDist > rc.getLocation().distanceSquaredTo(loc)){
-                        			minDist = rc.getLocation().distanceSquaredTo(loc);
-                        			minLoc = loc;
-                        		}
-                        	}
-                        	for(RobotInfo loc : locs2){
-                        		if(minDist > rc.getLocation().distanceSquaredTo(loc.location)){
-                        			minDist = rc.getLocation().distanceSquaredTo(loc.location);
-                        			minLoc = loc.location;
-                        		}
-                        	}
+                        	MapLocation[] parts = rc.sensePartLocations(10);
+                        	RobotInfo[] neutrals = rc.senseNearbyRobots(10,Team.NEUTRAL);
+                        	MapLocation toMove = null;
+                        	if(neutrals.length > 0)
+                        		toMove = nearest(rc.getLocation(), neutrals).location;
+                        	else if(parts.length > 0)
+                        		toMove = nearest(rc.getLocation(), parts);
                         	
-                        	
-                            Direction dirToMove;
-                            if(minDist != 12345)
-                            	dirToMove = rc.getLocation().directionTo(minLoc);
+                        	Direction dirToMove;
+                        	if(toMove != null)
+                            	dirToMove = rc.getLocation().directionTo(toMove);
                         	else
                         		dirToMove = directions[rand.nextInt(8)];
                             // Check the rubble in that direction
@@ -115,7 +180,7 @@ public class RobotPlayer {
                         	//else 
                         		typeToBuild = robotTypes[fate % robotTypes.length];
                             // Check for sufficient parts
-                            if (rc.hasBuildRequirements(typeToBuild)) {
+                            if (rc.isCoreReady() && rc.hasBuildRequirements(typeToBuild)) {
                                 // Choose a random direction to try to build in
                                 Direction dirToBuild = directions[rand.nextInt(8)];
                                 for (int i = 0; i < 8; i++) {
@@ -133,8 +198,11 @@ public class RobotPlayer {
                     }
                     
                     RobotInfo[] friendsWithinRange = rc.senseNearbyRobots(myAttackRange, myTeam);
-                    if(friendsWithinRange.length > 0)
-                    	rc.repair(friendsWithinRange[0].location);
+                    for(int i = 0; i < friendsWithinRange.length; i++)
+                    	if(friendsWithinRange[i].type!=RobotType.ARCHON && friendsWithinRange[i].health < friendsWithinRange[i].maxHealth){
+                    		rc.repair(friendsWithinRange[i].location);
+                    		break;
+                    	}
                     
                     Clock.yield();
                 } catch (Exception e) {
@@ -143,89 +211,76 @@ public class RobotPlayer {
                 }
             }
         } else if (rc.getType() != RobotType.TURRET) {
+        	//todo - since vipers infect, send viper raids
             try {
                 // Any code here gets executed exactly once at the beginning of the game.
-                myAttackRange = rc.getType().attackRadiusSquared;
             } catch (Exception e) {
                 // Throwing an uncaught exception makes the robot die, so we need to catch exceptions.
                 // Caught exceptions will result in a bytecode penalty.
                 System.out.println(e.getMessage());
                 e.printStackTrace();
             }
-
+            
             while (true) {
                 // This is a loop to prevent the run() method from returning. Because of the Clock.yield()
                 // at the end of it, the loop will iterate once per game round.
                 try {
-                    int fate = rand.nextInt(1000);
-                    
-                    if (fate % 5 == 3) {
-                        // Send a normal signal
-                        rc.broadcastSignal(80);
-                    }
-
                     boolean done = false;
 
                     // If this robot type can attack, check for enemies within range and attack one
                     if (myAttackRange > 0) {
                         RobotInfo[] enemiesWithinRange = rc.senseNearbyRobots(1000,enemyTeam);
-                        if(enemiesWithinRange.length == 0)enemiesWithinRange = rc.senseNearbyRobots(1000,Team.ZOMBIE);
+                        if(enemiesWithinRange.length == 0)
+                        	enemiesWithinRange = rc.senseNearbyRobots(1000,Team.ZOMBIE);
                         
                         if (enemiesWithinRange.length > 0){
-	                        MapLocation nearestEnemy = nearest(rc, enemiesWithinRange);
-                        	if(rc.isWeaponReady() && rc.canAttackLocation(nearestEnemy)){
-                        		rc.attackLocation(nearestEnemy);
+	                        RobotInfo nearestEnemy = nearest(rc.getLocation(), enemiesWithinRange);
+                        	if(rc.isWeaponReady() && rc.canAttackLocation(nearestEnemy.location)){
+                        		//todo - prioritize by low health
+                        		rc.attackLocation(nearestEnemy.location);
     	                        done = true;
                         	}
                         	else if(rc.isCoreReady()){
-                        		Direction dir;
-                        		if(rc.getLocation().distanceSquaredTo(nearestEnemy) >= myAttackRange - 5)
-                        			dir = rc.getLocation().directionTo(nearestEnemy);
-                        		else
-                        			dir = nearestEnemy.directionTo(rc.getLocation());
+                        		double aggression = rc.getHealth()/rc.getType().maxHealth; //also account for infection
                         		
-                        		if(rc.canMove(dir)){
-                        			rc.move(dir);
-                        			done = true;
-                        		}
+                        		Direction dir = null;
+                        		int distToNearestEnemy = rc.getLocation().distanceSquaredTo(nearestEnemy.location);
+                        		if(distToNearestEnemy <= nearestEnemy.type.attackRadiusSquared + 6 + aggression * 6) //too close, run away
+                        			dir = hostileDirection(rc).opposite();
+                        		else if(distToNearestEnemy > myAttackRange - aggression * 2) //too far, be aggressive
+                        			dir = rc.getLocation().directionTo(nearestEnemy.location);
+                        		else //so it'll circle around and kinda surround the enemy?
+                        			if(rc.getID()%2 == 0)
+                        				dir = rc.getLocation().directionTo(nearestEnemy.location).rotateLeft().rotateLeft();
+                        			else
+                        				dir = rc.getLocation().directionTo(nearestEnemy.location).rotateRight().rotateRight();
+                        		
+                        		if(dir != null)
+                        			done = squishMove(rc, dir);
                         	}
                         }
                     }
-
-                    if (!done) {
-                        if (rc.isCoreReady()) {
-                        	boolean alreadyMoved = false;
-                        	if(rc.getHealth() < 100){
-                        		RobotInfo[] enemiesWithinRange = rc.senseNearbyRobots(myAttackRange, enemyTeam);
-                        		if(enemiesWithinRange.length > 0){
-                        			Direction dirToMove = rc.getLocation().directionTo(enemiesWithinRange[rand.nextInt(enemiesWithinRange.length)].location);
-                                    if (rc.senseRubble(rc.getLocation().add(dirToMove)) >= GameConstants.RUBBLE_OBSTRUCTION_THRESH) {
-                                        // Too much rubble, so I should clear it
-                                        rc.clearRubble(dirToMove);
-                                        // Check if I can move in this direction
-                                    } else if (rc.canMove(dirToMove)) {
-                                        // Move
-                                        rc.move(dirToMove);
-                                        alreadyMoved = true;
-                                    }
-                        		}
-                        	}
-                            if (!alreadyMoved && fate < 600) {
-                                // Choose a random direction to try to move in
-                                Direction dirToMove = directions[fate % 8];
-                                // Check the rubble in that direction
-                                if (rc.senseRubble(rc.getLocation().add(dirToMove)) >= GameConstants.RUBBLE_OBSTRUCTION_THRESH) {
-                                    // Too much rubble, so I should clear it
-                                    rc.clearRubble(dirToMove);
-                                    // Check if I can move in this direction
-                                } else if (rc.canMove(dirToMove)) {
-                                    // Move
-                                    rc.move(dirToMove);
-                                }
-                            }
-                        }
+                    
+                    if (!done && rc.isCoreReady()) {
+                        // Choose a direction to try to move in
+                    		//todo - how would I bait a group of zombies to move with me toward the enemy team?
+                    	Direction dir = null;
+                    	
+                    	//todo - Adjust these friendliness parameters to be higher with low health
+                    		//and also when a signal is heard, so people will group up
+                    		//also move toward the signal
+                    	
+                		if(friendliness(rc,rc.getLocation()) > 15) //too many friends, go away
+                			dir = friendlyDirection(rc).opposite();
+                		else if(friendliness(rc,rc.getLocation()) < 8) //too few friends, come back
+                			dir = friendlyDirection(rc);
+                    	
+                    	if(dir == null || dir == Direction.NONE && rand.nextBoolean())
+                    		dir = directions[rand.nextInt(8)];
+                    	
+                		done = squishMoveWithRubble(rc, dir);
                     }
-
+                    
                     Clock.yield();
                 } catch (Exception e) {
                     System.out.println(e.getMessage());
@@ -234,7 +289,6 @@ public class RobotPlayer {
             }
         } else if (rc.getType() == RobotType.TURRET) {
             try {
-                myAttackRange = rc.getType().attackRadiusSquared;
             } catch (Exception e) {
                 System.out.println(e.getMessage());
                 e.printStackTrace();
