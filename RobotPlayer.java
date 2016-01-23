@@ -1,6 +1,7 @@
 package team369;
 
-import battlecode.common.*;
+import battlecode.common.Clock;
+import battlecode.common.RobotController;
 
 public class RobotPlayer {
 	
@@ -27,6 +28,9 @@ public class RobotPlayer {
         		break;
         	case TURRET:
         		r = new Turret(rc);
+        		break;
+        	case SCOUT:
+        		r = new Scout(rc);
         		break;
 			default:
 				r = new Soldier(rc);

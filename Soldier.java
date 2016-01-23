@@ -1,6 +1,9 @@
 package team369;
 
-import battlecode.common.*;
+import battlecode.common.Direction;
+import battlecode.common.RobotController;
+import battlecode.common.RobotInfo;
+import battlecode.common.Team;
 
 public class Soldier extends Robot{
 	public Soldier(RobotController rc) throws Exception{

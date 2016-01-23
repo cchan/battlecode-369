@@ -2,7 +2,14 @@ package team369;
 
 import java.util.ArrayList;
 import java.util.Random;
-import battlecode.common.*;
+
+import battlecode.common.Direction;
+import battlecode.common.GameActionException;
+import battlecode.common.GameConstants;
+import battlecode.common.MapLocation;
+import battlecode.common.RobotController;
+import battlecode.common.RobotInfo;
+import battlecode.common.Team;
 
 public abstract class Robot {
 	Direction[] directions = {Direction.NORTH, Direction.NORTH_EAST, Direction.EAST, Direction.SOUTH_EAST,
@@ -11,23 +18,24 @@ public abstract class Robot {
 	int myAttackRange;
 	Team myTeam, enemyTeam;
 	RobotController rc;
+	SignalAdapter sa;
 	
-	public Robot(RobotController rc){
+	protected Robot(RobotController rc){
         rand = new Random(rc.getID());
         myAttackRange = rc.getType().attackRadiusSquared;
         myTeam = rc.getTeam();
         enemyTeam = myTeam.opponent();
+        sa = new SignalAdapter(rc);
         this.rc = rc;
 	}
 	public abstract void loop() throws Exception;
 	
-	
 	public static final int estimationSenseRange = 100;
-	public int dangerosity(MapLocation loc){
+	public int hostility(MapLocation loc){
 		return rc.senseHostileRobots(loc,estimationSenseRange).length;
 	}
-	public int dangerosity(){
-		return dangerosity(rc.getLocation());
+	public int hostility(){
+		return hostility(rc.getLocation());
 	}
 	public int friendliness(MapLocation loc){
 		return rc.senseNearbyRobots(loc, estimationSenseRange, rc.getTeam()).length;

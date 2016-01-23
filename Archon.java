@@ -1,16 +1,31 @@
 package team369;
 
-import battlecode.common.*;
+import battlecode.common.Direction;
+import battlecode.common.GameConstants;
+import battlecode.common.MapLocation;
+import battlecode.common.RobotController;
+import battlecode.common.RobotInfo;
+import battlecode.common.RobotType;
+import battlecode.common.Team;
 
 public class Archon extends Robot {
-	RobotType[] robotTypes = {RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER,
-            RobotType.VIPER, RobotType.TURRET, RobotType.TURRET};
+	RobotType[] robotTypes = {RobotType.SCOUT, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER,
+            RobotType.TURRET, RobotType.TURRET, RobotType.TURRET, RobotType.TURRET};
 	public Archon(RobotController rc){
 		super(rc);
 	}
 	public void loop() throws Exception{
-		int fate = rand.nextInt(1000);
-        
+		{
+			RobotInfo[] enemyRobots = rc.senseNearbyRobots(60, enemyTeam);
+			int i = 0;
+			for(; i < GameConstants.MESSAGE_SIGNALS_PER_TURN && i < enemyRobots.length; i++)
+				sa.broadcastEnemyPosition(enemyRobots[i].location, 50);
+			
+			RobotInfo[] zombieRobots = rc.senseNearbyRobots(60, Team.ZOMBIE);
+			for(int j = 0; j + i < GameConstants.MESSAGE_SIGNALS_PER_TURN && j < zombieRobots.length; j++)
+				sa.broadcastZombiePosition(zombieRobots[j].location, 50);
+		}
+		
         // Check if this ARCHON's core is ready
         if (rc.isCoreReady()) {
         	RobotInfo[] hostiles = rc.senseHostileRobots(rc.getLocation(), 40);
@@ -29,7 +44,7 @@ public class Archon extends Robot {
         		rc.activate(neutralWithinRange[0].location);
         		return;
         	}
-        	else if (moveable <= 2 || fate < (rc.getTeamParts()>300?900:600)) { //if over 300 parts, build more!
+        	else if (moveable <= 2 || rand.nextInt(10) < (rc.getTeamParts()>300?9:6)) { //if over 300 parts, build more!
                 // Choose a random direction to try to move in, or look for parts
             	MapLocation[] parts = rc.sensePartLocations(10);
             	RobotInfo[] neutrals = rc.senseNearbyRobots(10,Team.NEUTRAL);
@@ -66,7 +81,7 @@ public class Archon extends Robot {
             	RobotType typeToBuild;
             	//if(rc.getRoundNum() < 150)typeToBuild = RobotType.TURRET;
             	//else 
-            		typeToBuild = robotTypes[fate % robotTypes.length];
+            		typeToBuild = robotTypes[rand.nextInt(robotTypes.length)];
                 // Check for sufficient parts
                 if (rc.isCoreReady() && rc.hasBuildRequirements(typeToBuild)) {
                     // Choose a random direction to try to build in
