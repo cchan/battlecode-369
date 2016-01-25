@@ -55,8 +55,9 @@ public class Turret extends Robot {
 		
 		for(Signal s : sa.allyMessageSignals){
 			int[] msg = s.getMessage();
-			if(team == enemyTeam && sa.getCommand(msg[0]) == SignalAdapter.CMD_ENEMY_POSITION || team == Team.ZOMBIE && sa.getCommand(msg[0]) == SignalAdapter.CMD_ZOMBIE_POSITION){
-				MapLocation decodedLoc = new MapLocation(sa.getData1(msg[0]), msg[1]);
+			if(team == enemyTeam && SignalAdapter.isCommand(msg,SignalAdapter.Cmd.ENEMY_POSITION) 
+					|| team == Team.ZOMBIE && SignalAdapter.isCommand(msg,SignalAdapter.Cmd.ZOMBIE_POSITION)){
+				MapLocation decodedLoc = SignalAdapter.getLocation(msg);
 				if(rc.canAttackLocation(decodedLoc))
 					return decodedLoc;
 			}

@@ -5,19 +5,26 @@ import java.util.ArrayList;
 import battlecode.common.GameActionException;
 import battlecode.common.MapLocation;
 import battlecode.common.RobotController;
+import battlecode.common.RobotType;
 import battlecode.common.Signal;
 
 public class SignalAdapter {
 	private static final int INT_LENGTH = 32; //bits
 	private static final int COMMAND_LENGTH = 4; //bits
 	private static final int COMMAND_MASK = 0xf0000000;
-	public static final int COMMAND_REMAINING = INT_LENGTH - COMMAND_LENGTH; // bits
+	private static final int COMMAND_REMAINING = INT_LENGTH - COMMAND_LENGTH; // bits
 	
-	public static final int CMD_ENEMY_POSITION = 0b0000;
-	//broadcastCommand(CMD_ENEMY_POSITION, MapLocation.x, MapLocation.y)
-	
-	public static final int CMD_ZOMBIE_POSITION = 0b0001;
-	//broadcastCommand(CMD_ZOMBIE_POSITION, MapLocation.x, MapLocation.y)
+	public static enum Cmd{
+		ENEMY_POSITION,
+		ZOMBIE_POSITION,
+		GO_AWAY,
+		MOVE_HERE,
+		ALLY_HOME,
+		ENEMY_HOME,
+		ZOMBIE_HOME,
+		COMMANDER_VOTE,
+		LONG_RANGE_MESSAGE;//hmm
+	}
 	
 	
 	private RobotController rc;
@@ -26,8 +33,19 @@ public class SignalAdapter {
 			enemyMessageSignals = new ArrayList<>(), 
 			enemyBasicSignals = new ArrayList<>();
 	
+	private boolean isCommander;
+	public boolean isCommander(){return isCommander;}
+	public final int COMMANDER_VOTE_RANGE = 100;
+	public void sendCommanderVote() throws Exception{
+		if(rc.emptySignalQueue().length != 0)
+			throw new Exception("Signal queue not empty when sending commander vote.");
+		rc.broadcastSignal(COMMANDER_VOTE_RANGE);
+		if(rc.emptySignalQueue().length == 0)
+			isCommander = true;
+	}
 	public SignalAdapter(RobotController rc){
 		this.rc = rc;
+		isCommander = false;
 	}
 	public void fetch(){
 		Signal[] raw = rc.emptySignalQueue();
@@ -52,19 +70,53 @@ public class SignalAdapter {
 		}
 	}
 	
+	public void broadcastGoAway(MapLocation loc, int broadcastRange) throws GameActionException{
+		broadcastLocationCommand(Cmd.GO_AWAY, loc, 0, broadcastRange);
+	}
+	public void broadcastMoveHere(MapLocation loc, int broadcastRange) throws GameActionException{
+		broadcastLocationCommand(Cmd.MOVE_HERE, loc, 0, broadcastRange);
+	}
+	public void broadcastAllyHome(MapLocation loc, int broadcastRange) throws GameActionException{
+		broadcastLocationCommand(Cmd.ALLY_HOME, loc, 0, broadcastRange);
+	}
+	public void broadcastEnemyHome(MapLocation loc, int broadcastRange) throws GameActionException{
+		broadcastLocationCommand(Cmd.ENEMY_HOME, loc, 0, broadcastRange);
+	}
+	public void broadcastZombieHome(MapLocation loc, int broadcastRange) throws GameActionException{
+		broadcastLocationCommand(Cmd.ZOMBIE_HOME, loc, 0, broadcastRange);
+	}
 	public void broadcastEnemyPosition(MapLocation loc, int broadcastRange) throws GameActionException{
-		broadcastCommand(CMD_ENEMY_POSITION, loc.x, loc.y, broadcastRange);
-	}	
+		broadcastLocationCommand(Cmd.ENEMY_POSITION, loc, 0, broadcastRange);
+	}
 	public void broadcastZombiePosition(MapLocation loc, int broadcastRange) throws GameActionException{
-		broadcastCommand(CMD_ZOMBIE_POSITION, loc.x, loc.y, broadcastRange);
+		broadcastLocationCommand(Cmd.ZOMBIE_POSITION, loc, 0, broadcastRange);
 	}
-	public void broadcastCommand(final int command, int data1, int data2, int broadcastRange) throws GameActionException{
-		rc.broadcastMessageSignal((data1 | COMMAND_MASK) & ~(~command << COMMAND_REMAINING), data2, broadcastRange);
+	
+	//10 bits each for location x and y
+	//could theoretically broadcast three locations at once with command :D
+	private void broadcastLocationCommand(Cmd cmd, MapLocation loc, int data2, int broadcastRange) throws GameActionException{
+		rc.broadcastMessageSignal((cmd.ordinal() << COMMAND_REMAINING) + ((loc.x % 1024) << 10) + (loc.y % 1024), data2, broadcastRange);
 	}
-	public int getCommand(int rawdata1){
-		return rawdata1 >>> COMMAND_REMAINING;
+	public static MapLocation getLocation(int[] msg){
+		return new MapLocation((msg[0]>>>10)%1024, msg[0]%1024);
 	}
-	public int getData1(int rawdata1){
+	/*public void broadcastTripleLocationCommand(Cmd cmd, MapLocation loc1, MapLocation loc2, MapLocation loc3, int broadcastRange){
+		//rc.broadcastMessageSignal((cmd.ordinal() << COMMAND_REMAINING) + ((loc.x % 1024) << 10) + (loc.y % 1024), data2, broadcastRange);
+	}
+	public static MapLocation[] getTripleLocation(int[] msg){
+		
+	}*/
+	
+	private void broadcastCommand(Cmd cmd, int data1, int data2, int broadcastRange) throws GameActionException{
+		rc.broadcastMessageSignal((data1 | COMMAND_MASK) & ~(~cmd.ordinal() << COMMAND_REMAINING), data2, broadcastRange);
+	}
+	public static Cmd getCommand(int[] msg){
+		return Cmd.values()[msg[0] >>> COMMAND_REMAINING];
+	}
+	public static boolean isCommand(int[] msg, Cmd cmd){
+		return (msg[0] >>> COMMAND_REMAINING) == cmd.ordinal();
+	}
+	public static int getData1(int rawdata1){
 		return rawdata1 & ~COMMAND_MASK;
 	}
 	public MapLocation[] getSignalingEnemyLocations(){

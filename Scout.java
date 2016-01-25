@@ -1,6 +1,7 @@
 package team369;
 
 import battlecode.common.RobotInfo;
+import battlecode.common.RobotType;
 import battlecode.common.Team;
 import battlecode.common.Direction;
 import battlecode.common.GameConstants;
@@ -17,8 +18,12 @@ public class Scout extends Robot{
 			sa.broadcastEnemyPosition(enemyRobots[i].location, 50);
 		
 		RobotInfo[] zombieRobots = rc.senseNearbyRobots(60, Team.ZOMBIE);
-		for(int j = 0; j + i < GameConstants.MESSAGE_SIGNALS_PER_TURN && j < zombieRobots.length; j++)
-			sa.broadcastZombiePosition(zombieRobots[j].location, 50);
+		for(int j = 0; j + i < GameConstants.MESSAGE_SIGNALS_PER_TURN && j < zombieRobots.length; j++){
+			if(zombieRobots[j].type == RobotType.ZOMBIEDEN)
+				sa.broadcastMoveHere(zombieRobots[j].location, 100);
+			else
+				sa.broadcastZombiePosition(zombieRobots[j].location, 50);
+		}
 		
 		
         if (rc.isCoreReady()) {

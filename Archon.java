@@ -7,26 +7,50 @@ import battlecode.common.RobotController;
 import battlecode.common.RobotInfo;
 import battlecode.common.RobotType;
 import battlecode.common.Team;
+import battlecode.common.ZombieSpawnSchedule;
 
 public class Archon extends Robot {
+	int openingBuildIndex = 0;
+	RobotType[] openingBuild = {RobotType.TURRET, RobotType.TURRET, RobotType.TURRET, RobotType.VIPER, RobotType.VIPER, RobotType.VIPER};
 	RobotType[] robotTypes = {RobotType.SCOUT, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER,
             RobotType.TURRET, RobotType.TURRET, RobotType.TURRET, RobotType.TURRET};
+	
+	MapLocation[] initialAllyLocs, initialEnemyLocs;
+	ZombieSpawnSchedule zss;
+	
 	public Archon(RobotController rc){
 		super(rc);
+		initialAllyLocs = rc.getInitialArchonLocations(myTeam);
+		initialEnemyLocs = rc.getInitialArchonLocations(enemyTeam);
+		zss = rc.getZombieSpawnSchedule();
 	}
 	public void loop() throws Exception{
-		{
-			RobotInfo[] enemyRobots = rc.senseNearbyRobots(60, enemyTeam);
-			int i = 0;
-			for(; i < GameConstants.MESSAGE_SIGNALS_PER_TURN && i < enemyRobots.length; i++)
-				sa.broadcastEnemyPosition(enemyRobots[i].location, 50);
-			
+		sa.fetch();
+		if(rc.getRoundNum()%100 == 0)
+			sa.sendCommanderVote();
+
+		RobotInfo[] enemyRobots = rc.senseNearbyRobots(60, enemyTeam);
+		int messagesSent = 0;
+		for(; messagesSent < GameConstants.MESSAGE_SIGNALS_PER_TURN && messagesSent < enemyRobots.length; messagesSent++)
+			sa.broadcastEnemyPosition(enemyRobots[messagesSent].location, 50);
+		if(messagesSent < GameConstants.MESSAGE_SIGNALS_PER_TURN){
 			RobotInfo[] zombieRobots = rc.senseNearbyRobots(60, Team.ZOMBIE);
-			for(int j = 0; j + i < GameConstants.MESSAGE_SIGNALS_PER_TURN && j < zombieRobots.length; j++)
+			for(int j = 0; messagesSent < GameConstants.MESSAGE_SIGNALS_PER_TURN && j < zombieRobots.length; messagesSent++, j++)
 				sa.broadcastZombiePosition(zombieRobots[j].location, 50);
 		}
 		
-        // Check if this ARCHON's core is ready
+        //Repair
+        RobotInfo[] friendsWithinRange = rc.senseNearbyRobots(myAttackRange, myTeam);
+        for(int i = 0; i < friendsWithinRange.length; i++)
+        	if(friendsWithinRange[i].type!=RobotType.ARCHON && friendsWithinRange[i].health < friendsWithinRange[i].maxHealth){
+        		rc.repair(friendsWithinRange[i].location);
+        		break;
+        	}
+        
+        if(sa.isCommander()){
+        	//sa.broadcastMoveHere(rc.getLocation(), 50);
+        }
+        
         if (rc.isCoreReady()) {
         	RobotInfo[] hostiles = rc.senseHostileRobots(rc.getLocation(), 40);
         	if(hostiles.length > 0){
@@ -55,10 +79,13 @@ public class Archon extends Robot {
             		toMove = nearest(rc.getLocation(), parts);
             	
             	Direction dirToMove;
-            	if(toMove != null)
+            	if(friendliness() < 5)
+            		dirToMove = friendlyDirection();
+            	else if(toMove != null)
                 	dirToMove = rc.getLocation().directionTo(toMove);
             	else
             		dirToMove = directions[rand.nextInt(8)];
+            	
                 // Check the rubble in that direction
                 double rubble = rc.senseRubble(rc.getLocation().add(dirToMove));
                 if (rubble > 5000){
@@ -79,8 +106,9 @@ public class Archon extends Robot {
             } else {
                 // Choose a random unit to build
             	RobotType typeToBuild;
-            	//if(rc.getRoundNum() < 150)typeToBuild = RobotType.TURRET;
-            	//else 
+            	if(openingBuildIndex < openingBuild.length)
+            		typeToBuild = openingBuild[openingBuildIndex]; //the increment for openingBuildIndex is right after rc.build()
+            	else 
             		typeToBuild = robotTypes[rand.nextInt(robotTypes.length)];
                 // Check for sufficient parts
                 if (rc.isCoreReady() && rc.hasBuildRequirements(typeToBuild)) {
@@ -90,6 +118,7 @@ public class Archon extends Robot {
                         // If possible, build in this direction
                         if (rc.canBuild(dirToBuild, typeToBuild)) {
                         	rc.build(dirToBuild, typeToBuild);
+                    		openingBuildIndex++;
                             return;
                         } else {
                             // Rotate the direction to try
@@ -99,13 +128,5 @@ public class Archon extends Robot {
                 }
             }
         }
-        
-        //Repair
-        RobotInfo[] friendsWithinRange = rc.senseNearbyRobots(myAttackRange, myTeam);
-        for(int i = 0; i < friendsWithinRange.length; i++)
-        	if(friendsWithinRange[i].type!=RobotType.ARCHON && friendsWithinRange[i].health < friendsWithinRange[i].maxHealth){
-        		rc.repair(friendsWithinRange[i].location);
-        		break;
-        	}
 	}
 }

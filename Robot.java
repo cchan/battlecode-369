@@ -27,6 +27,7 @@ public abstract class Robot {
         enemyTeam = myTeam.opponent();
         sa = new SignalAdapter(rc);
         this.rc = rc;
+        rc.emptySignalQueue(); //receives signals during construction, so get rid of those
 	}
 	public abstract void loop() throws Exception;
 	
@@ -43,8 +44,14 @@ public abstract class Robot {
 	public int friendliness(){
 		return friendliness(rc.getLocation());
 	}
+	public RobotInfo nearestHostile(){ //todo - use this in Scout to avoid ALL enemy units as much as possible
+		return nearest(rc.getLocation(),rc.senseNearbyRobots(rc.getLocation(),estimationSenseRange, enemyTeam));
+	}
+	public RobotInfo nearestFriendly(){
+		return nearest(rc.getLocation(),rc.senseNearbyRobots(rc.getLocation(),estimationSenseRange, myTeam));
+	}
 	public Direction friendlyDirection(){
-		return averageDirectionToRobots(rc.getLocation(), rc.senseNearbyRobots(estimationSenseRange,rc.getTeam()));
+		return averageDirectionToRobots(rc.getLocation(), rc.senseNearbyRobots(estimationSenseRange, myTeam));
 	}
 	public Direction hostileDirection(){
 		return averageDirectionToRobots(rc.getLocation(), rc.senseHostileRobots(rc.getLocation(), estimationSenseRange));
@@ -95,14 +102,14 @@ public abstract class Robot {
 	}
 	
 	
-	static final int[] possibleDirections = {0, 1, -1, 2, -2, 3, -3, 4};
-	ArrayList<MapLocation> pastLocations = new ArrayList<MapLocation>();
-	boolean patient = true;
+	public static final int[] possibleDirections = {0, 1, -1, 2, -2, 3, -3, 4};
+	public ArrayList<MapLocation> pastLocations = new ArrayList<MapLocation>();
+	public int patience = 30;
 	public void squishMove(Direction dir) throws GameActionException{
-		if(!patient){
+		if(patience <= 0){
 			if(!clearIfRubble(dir) && rc.canMove(dir)){
 				rc.move(dir);
-				patient = true;
+				patience = Math.min(patience + 10, 30);
 			}
 			return;
 		}else{
@@ -113,16 +120,17 @@ public abstract class Robot {
 					if(pastLocations.size() > 10)
 						pastLocations.remove(0);
 					rc.move(candidateDirection);
-					patient = true;
+					patience = Math.min(patience + 10, 30);
 					return;
 				}
 			}
 		}
 		// in case it does something stupid and gets itself stuck
-		patient = false;
-		pastLocations.remove(0);
+		patience -= 5;
+		if(pastLocations.size() > 0)
+			pastLocations.remove(0);
 	}
-	static final double maxClearableRubble = 100000;
+	public static final double maxClearableRubble = 100000;
 	public boolean clearIfRubble(Direction dir) throws GameActionException{
 		double rubble = rc.senseRubble(rc.getLocation().add(dir));
 		if(rubble > GameConstants.RUBBLE_OBSTRUCTION_THRESH
