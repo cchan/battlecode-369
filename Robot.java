@@ -10,6 +10,8 @@ import battlecode.common.MapLocation;
 import battlecode.common.RobotController;
 import battlecode.common.RobotInfo;
 import battlecode.common.Team;
+import battlecode.common.ZombieSpawnSchedule;
+
 
 public abstract class Robot {
 	Direction[] directions = {Direction.NORTH, Direction.NORTH_EAST, Direction.EAST, Direction.SOUTH_EAST,
@@ -19,6 +21,7 @@ public abstract class Robot {
 	Team myTeam, enemyTeam;
 	RobotController rc;
 	SignalAdapter sa;
+	ZombieSpawnSchedule zss;
 	
 	protected Robot(RobotController rc){
         rand = new Random(rc.getID());
@@ -28,33 +31,81 @@ public abstract class Robot {
         sa = new SignalAdapter(rc);
         this.rc = rc;
         rc.emptySignalQueue(); //receives signals during construction, so get rid of those
+		zss = rc.getZombieSpawnSchedule();
 	}
 	public abstract void loop() throws Exception;
 	
+	public boolean areZombiesSpawning(){
+		for(int i : zss.getRounds())
+			if(i > rc.getRoundNum() - 10 && i < rc.getRoundNum() + 10)
+				return true;
+		return false;
+	}
+	
 	public static final int estimationSenseRange = 100;
-	public int hostility(MapLocation loc){
-		return rc.senseHostileRobots(loc,estimationSenseRange).length;
+	
+	private static RobotInfo[] senseHostileRobotsCachedValue;
+	private static int senseHostileRobotsCachedRound = -1;
+	public RobotInfo[] senseHostileRobotsCached(){
+		if(rc.getRoundNum() > senseHostileRobotsCachedRound)
+			return senseHostileRobotsCachedValue = rc.senseHostileRobots(rc.getLocation(),estimationSenseRange);
+		else
+			return senseHostileRobotsCachedValue;
 	}
-	public int hostility(){
-		return hostility(rc.getLocation());
+	private static RobotInfo[] senseEnemyRobotsCachedValue;
+	private static int senseEnemyRobotsCachedRound = -1;
+	public RobotInfo[] senseEnemyRobotsCached(){
+		if(rc.getRoundNum() > senseEnemyRobotsCachedRound)
+			return senseEnemyRobotsCachedValue = rc.senseNearbyRobots(rc.getLocation(),estimationSenseRange,enemyTeam);
+		else
+			return senseEnemyRobotsCachedValue;
 	}
-	public int friendliness(MapLocation loc){
-		return rc.senseNearbyRobots(loc, estimationSenseRange, rc.getTeam()).length;
+	private static RobotInfo[] senseZombieRobotsCachedValue;
+	private static int senseZombieRobotsCachedRound = -1;
+	public RobotInfo[] senseZombieRobotsCached(){
+		if(rc.getRoundNum() > senseZombieRobotsCachedRound)
+			return senseZombieRobotsCachedValue = rc.senseNearbyRobots(rc.getLocation(),estimationSenseRange,Team.ZOMBIE);
+		else
+			return senseZombieRobotsCachedValue;
 	}
-	public int friendliness(){
-		return friendliness(rc.getLocation());
+	private static RobotInfo[] senseFriendlyRobotsCachedValue;
+	private static int senseFriendlyRobotsCachedRound = -1;
+	public RobotInfo[] senseFriendlyRobotsCached(){
+		if(rc.getRoundNum() > senseFriendlyRobotsCachedRound)
+			return senseFriendlyRobotsCachedValue = rc.senseNearbyRobots(rc.getLocation(),estimationSenseRange,myTeam);
+		else
+			return senseFriendlyRobotsCachedValue;
+	}
+	
+	public int hostileCount(){
+		return senseHostileRobotsCached().length;
+	}
+	public int friendlyCount(){
+		return senseFriendlyRobotsCached().length;
+	}
+	public int hostileHealthTotal(){
+		int total = 0;
+		for(RobotInfo r : senseHostileRobotsCached())
+			total += r.health;
+		return total;
+	}
+	public int friendlyHealthTotal(){
+		int total = 0;
+		for(RobotInfo r : senseFriendlyRobotsCached())
+			total += r.health;
+		return total;
 	}
 	public RobotInfo nearestHostile(){ //todo - use this in Scout to avoid ALL enemy units as much as possible
-		return nearest(rc.getLocation(),rc.senseNearbyRobots(rc.getLocation(),estimationSenseRange, enemyTeam));
+		return nearest(rc.getLocation(),senseHostileRobotsCached());
 	}
 	public RobotInfo nearestFriendly(){
-		return nearest(rc.getLocation(),rc.senseNearbyRobots(rc.getLocation(),estimationSenseRange, myTeam));
-	}
-	public Direction friendlyDirection(){
-		return averageDirectionToRobots(rc.getLocation(), rc.senseNearbyRobots(estimationSenseRange, myTeam));
+		return nearest(rc.getLocation(),senseFriendlyRobotsCached());
 	}
 	public Direction hostileDirection(){
-		return averageDirectionToRobots(rc.getLocation(), rc.senseHostileRobots(rc.getLocation(), estimationSenseRange));
+		return averageDirectionToRobots(rc.getLocation(), senseHostileRobotsCached());
+	}
+	public Direction friendlyDirection(){
+		return averageDirectionToRobots(rc.getLocation(), senseFriendlyRobotsCached());
 	}
 	
 	public static Direction averageDirection(Direction[] dirs){
@@ -68,9 +119,8 @@ public abstract class Robot {
 	public static Direction averageDirectionToRobots(MapLocation here, RobotInfo[] robots){
 		int totaldx = 0, totaldy = 0;
 		for(RobotInfo r : robots){
-			Direction d = here.directionTo(r.location);
-			totaldx += d.dx;
-			totaldy += d.dy;
+			totaldx += r.location.x - here.x;
+			totaldy += r.location.y - here.y;
 		}
 		return new MapLocation(0,0).directionTo(new MapLocation(totaldx, totaldy));
 	}

@@ -5,10 +5,19 @@ import java.util.ArrayList;
 import battlecode.common.GameActionException;
 import battlecode.common.MapLocation;
 import battlecode.common.RobotController;
-import battlecode.common.RobotType;
 import battlecode.common.Signal;
 
 public class SignalAdapter {
+	//TO DO NEXT.
+	//just have simple commands
+	//move & guard here [kinda like sc2 simplicity]
+		//what robot type/which robots
+		//what priority level
+		//what location
+		//when to stop relaying the message
+	//kite-and-run [baiting toward enemy team]
+	//and then the informational stuff like ZOMBIE_HOME we can add later
+	
 	private static final int INT_LENGTH = 32; //bits
 	private static final int COMMAND_LENGTH = 4; //bits
 	private static final int COMMAND_MASK = 0xf0000000;

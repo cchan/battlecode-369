@@ -23,6 +23,7 @@ public class RobotPlayer {
         	case ARCHON:
         		r = new Archon(rc);
         		break;
+        	case VIPER:
         	case SOLDIER:
         		r = new Soldier(rc);
         		break;

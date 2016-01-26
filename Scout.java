@@ -2,6 +2,7 @@ package team369;
 
 import battlecode.common.RobotInfo;
 import battlecode.common.RobotType;
+import battlecode.common.Signal;
 import battlecode.common.Team;
 import battlecode.common.Direction;
 import battlecode.common.GameConstants;
@@ -12,6 +13,8 @@ public class Scout extends Robot{
 		super(rc);
 	}
 	public void loop() throws Exception{
+		sa.fetch();
+		
 		RobotInfo[] enemyRobots = rc.senseNearbyRobots(60, enemyTeam);
 		int i = 0;
 		for(; i < GameConstants.MESSAGE_SIGNALS_PER_TURN && i < enemyRobots.length; i++)
@@ -20,10 +23,15 @@ public class Scout extends Robot{
 		RobotInfo[] zombieRobots = rc.senseNearbyRobots(60, Team.ZOMBIE);
 		for(int j = 0; j + i < GameConstants.MESSAGE_SIGNALS_PER_TURN && j < zombieRobots.length; j++){
 			if(zombieRobots[j].type == RobotType.ZOMBIEDEN)
-				sa.broadcastMoveHere(zombieRobots[j].location, 100);
+				sa.broadcastZombieHome(zombieRobots[j].location, 100);
 			else
 				sa.broadcastZombiePosition(zombieRobots[j].location, 50);
 		}
+		
+		/*for(Signal s : sa.allyMessageSignals) //rebroadcast
+			if(rc.getMessageSignalCount() < 20 && SignalAdapter.isCommand(s.getMessage(), SignalAdapter.Cmd.ZOMBIE_HOME))
+				sa.broadcastZombieHome(SignalAdapter.getLocation(s.getMessage()),100);
+		*/
 		
 		
         if (rc.isCoreReady()) {
@@ -31,7 +39,7 @@ public class Scout extends Robot{
         		//todo - how would I bait a group of zombies to move with me toward the enemy team?
         	Direction dir = null;
         	
-    		if(hostility() > 8) //too dangerous, go away
+    		if(hostileCount() > 2) //too dangerous, go away
     			dir = hostileDirection().opposite();
         	
         	if(dir == null || (dir == Direction.NONE && rand.nextBoolean()))

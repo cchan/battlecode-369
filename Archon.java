@@ -7,22 +7,39 @@ import battlecode.common.RobotController;
 import battlecode.common.RobotInfo;
 import battlecode.common.RobotType;
 import battlecode.common.Team;
-import battlecode.common.ZombieSpawnSchedule;
 
 public class Archon extends Robot {
 	int openingBuildIndex = 0;
-	RobotType[] openingBuild = {RobotType.TURRET, RobotType.TURRET, RobotType.TURRET, RobotType.VIPER, RobotType.VIPER, RobotType.VIPER};
-	RobotType[] robotTypes = {RobotType.SCOUT, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER,
+	boolean isMasterArchon = false;
+	RobotType[] masterOpeningBuild = {RobotType.TURRET, RobotType.TURRET, RobotType.TURRET, RobotType.VIPER, RobotType.VIPER, RobotType.VIPER, RobotType.VIPER, RobotType.VIPER, RobotType.SOLDIER, RobotType.SOLDIER};
+	RobotType[] subordOpeningBuild = {RobotType.GUARD, RobotType.VIPER, RobotType.SOLDIER, RobotType.SOLDIER};
+	RobotType[] robotTypes = {RobotType.SCOUT, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.VIPER,
             RobotType.TURRET, RobotType.TURRET, RobotType.TURRET, RobotType.TURRET};
 	
 	MapLocation[] initialAllyLocs, initialEnemyLocs;
-	ZombieSpawnSchedule zss;
 	
 	public Archon(RobotController rc){
 		super(rc);
 		initialAllyLocs = rc.getInitialArchonLocations(myTeam);
 		initialEnemyLocs = rc.getInitialArchonLocations(enemyTeam);
-		zss = rc.getZombieSpawnSchedule();
+		
+		int minIndex = -1;
+		int minSum = 10000000;
+		for(int i = 0; i < initialAllyLocs.length; i++){
+			int sum = 0;
+			for(int j = 0; j < initialEnemyLocs.length; j++)
+				sum += initialAllyLocs[i].distanceSquaredTo(initialEnemyLocs[j]);
+			if(sum < minSum){
+				minSum = sum;
+				minIndex = i;
+			}
+		}
+		if(initialAllyLocs[minIndex] == rc.getLocation())
+			isMasterArchon = true;
+		
+		
+		//if globally the master, go opening build
+		//otherwise
 	}
 	public void loop() throws Exception{
 		sa.fetch();
@@ -79,7 +96,7 @@ public class Archon extends Robot {
             		toMove = nearest(rc.getLocation(), parts);
             	
             	Direction dirToMove;
-            	if(friendliness() < 5)
+            	if(friendlyCount() < 5)
             		dirToMove = friendlyDirection();
             	else if(toMove != null)
                 	dirToMove = rc.getLocation().directionTo(toMove);
@@ -106,8 +123,10 @@ public class Archon extends Robot {
             } else {
                 // Choose a random unit to build
             	RobotType typeToBuild;
-            	if(openingBuildIndex < openingBuild.length)
-            		typeToBuild = openingBuild[openingBuildIndex]; //the increment for openingBuildIndex is right after rc.build()
+            	if(isMasterArchon && openingBuildIndex < masterOpeningBuild.length)
+            		typeToBuild = masterOpeningBuild[openingBuildIndex]; //the increment for openingBuildIndex is right after rc.build()
+            	else if(!isMasterArchon && openingBuildIndex < subordOpeningBuild.length)
+            		typeToBuild = subordOpeningBuild[openingBuildIndex];
             	else 
             		typeToBuild = robotTypes[rand.nextInt(robotTypes.length)];
                 // Check for sufficient parts
