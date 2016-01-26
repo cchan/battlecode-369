@@ -6,15 +6,22 @@ import battlecode.common.RobotController;
 import battlecode.common.RobotInfo;
 import battlecode.common.RobotType;
 import battlecode.common.Signal;
-import battlecode.common.Team;
 
 public class Soldier extends Robot{
 	public Soldier(RobotController rc) throws Exception{
 		super(rc);
 	}
 	MapLocation goalLoc;
+	int commanderID = -1;
 	public void loop() throws Exception{
 		sa.fetch();
+		
+		if(rc.getRoundNum() % 100 == 0){
+			commanderID = -1;
+			for(Signal s : sa.allyMessageSignals)
+				if(SignalAdapter.isCommand(s.getMessage(), SignalAdapter.Cmd.COMMANDER_VOTE))
+					commanderID = s.getRobotID();
+		}
 		
         RobotInfo[] enemiesWithinRange = senseEnemyRobotsCached();
         if(enemiesWithinRange.length == 0)
@@ -24,27 +31,31 @@ public class Soldier extends Robot{
 		double aggression = rc.getHealth()/rc.getType().maxHealth; //also account for infection
 		rc.setIndicatorString(1,"areZombiesSpawning: "+areZombiesSpawning()+" Current: "+rc.getRoundNum());
         RobotInfo nearestEnemy = nearest(rc.getLocation(), enemiesWithinRange);
-		if(hostileCount() == 1 && (nearestEnemy.type == RobotType.ZOMBIEDEN || nearestEnemy.type == RobotType.FASTZOMBIE))
-			aggression = 100;
-		if(areZombiesSpawning()){ //nearby (in terms of round#) a zombie spawn, run away from zombies
-			aggression = -1;
-			rc.setIndicatorString(2, "Scared! Round "+rc.getRoundNum());
-		}
-		else{
-			aggression = Math.max(aggression, 0);
-			rc.setIndicatorString(2, "Not scared.");
-		}
+        
+        if(nearestEnemy != null){
+			if(hostileCount() == 1 && ((nearestEnemy.type == RobotType.ZOMBIEDEN && friendlyCount() > 7) || nearestEnemy.type == RobotType.FASTZOMBIE))
+				aggression = 100;
+			else if(areZombiesSpawning() || nearestEnemy.type == RobotType.BIGZOMBIE) //nearby (in terms of round#) a zombie spawn, run away from zombies
+				aggression = -1;
+			else
+				aggression = Math.max(aggression, 0);
+        }
 		rc.setIndicatorString(0, "Aggression: "+aggression);
         
         if (enemiesWithinRange.length > 0){
-        	if(rc.isWeaponReady() && rc.canAttackLocation(nearestEnemy.location)){
+    		int distToNearestEnemy = rc.getLocation().distanceSquaredTo(nearestEnemy.location);
+        	if(rc.isWeaponReady() && rc.canAttackLocation(nearestEnemy.location) && (rc.getType() == RobotType.GUARD || distToNearestEnemy > 3)){
         		//todo - prioritize by low health
         		rc.attackLocation(nearestEnemy.location);
+    			rc.broadcastSignal(60);
         		return;
         	}
-        	else if(rc.isCoreReady()){
+        	else if(rc.isCoreReady()){ //kiting!
         		Direction dir = null;
-        		int distToNearestEnemy = rc.getLocation().distanceSquaredTo(nearestEnemy.location);
+        		
+        		if(rc.senseRubble(rc.getLocation()) > 0)
+        			aggression -= 1;
+        		
         		if(hostileCount() > 1 && hostileHealthTotal() > friendlyHealthTotal()) //overwhelming power, run away
         			dir = hostileDirection().opposite();
         		else if(distToNearestEnemy > myAttackRange - 4 - aggression * 2 && distToNearestEnemy > 2) //too far, be aggressive
@@ -70,28 +81,48 @@ public class Soldier extends Robot{
         		//todo - how would I bait a group of zombies to move with me toward the enemy team?
         	Direction dir = null;
         	
-        	for(Signal s : sa.allyMessageSignals){
-        		int[] msg = s.getMessage();
-        		if(SignalAdapter.isCommand(msg,SignalAdapter.Cmd.ZOMBIE_HOME)){
-        			goalLoc = SignalAdapter.getLocation(msg);
-        			break;
-        		}
-        		else if(SignalAdapter.isCommand(msg,SignalAdapter.Cmd.MOVE_HERE)){
-        			goalLoc = SignalAdapter.getLocation(msg);
-        			break;
-        		}
-        	}
-
-        	if(goalLoc != null){
-        		if(rc.getLocation().distanceSquaredTo(goalLoc) < 15)
+        	if(friendlyCount() == 0 && hostileCount() > 5) //bait toward enemies if alone
+        		dir = rc.getLocation().directionTo(enemyHomeAreaLocation);
+	    	if(friendlyCount() < 15 && rc.getRoundNum() < 500 || friendlyCount() < 15 - 10 * aggression) //too few friends, come back
+	    		dir = friendlyDirection();
+	    	
+			if(dir == null){
+	        	for(Signal s : sa.allyMessageSignals){
+	        		int[] msg = s.getMessage();
+	        		if(SignalAdapter.isCommand(msg,SignalAdapter.Cmd.ZOMBIE_HOME)){
+	        			goalLoc = SignalAdapter.getLocation(msg);
+			        	if(rc.getLocation().distanceSquaredTo(goalLoc) >= 10)
+			        		break;
+			        	else
+			        		goalLoc = null;
+	        		}
+	        		else if(SignalAdapter.isCommand(msg,SignalAdapter.Cmd.MOVE_HERE)){
+	        			goalLoc = SignalAdapter.getLocation(msg);
+			        	if(rc.getLocation().distanceSquaredTo(goalLoc) >= 10)
+			        		break;
+			        	else
+			        		goalLoc = null;
+	        		}
+	        	}
+			}
+        	if(dir == null && goalLoc == null)
+        		for(Signal s : sa.allyBasicSignals)
+		        	if(rc.getLocation().distanceSquaredTo(s.getLocation()) >= 10){
+		        		goalLoc = s.getLocation();
+		        		break;
+		        	}
+        	
+        	
+        	if(dir == null && goalLoc != null){
+        		if(rc.getLocation().distanceSquaredTo(goalLoc) < 10)
         			goalLoc = null;
         		else
         			dir = rc.getLocation().directionTo(goalLoc);
         	}
         	
-        	if(dir == null)
-	    		if(friendlyCount() < 15 - 10 * aggression) //too few friends, come back
-	    			dir = friendlyDirection();
+        	//run to archon for health benefits
+        	if(dir == null && rc.getHealth() < rc.getType().maxHealth / 4 && commanderID != -1 && rc.canSenseRobot(commanderID))
+        		dir = rc.getLocation().directionTo(rc.senseRobot(commanderID).location);
     		
         	if((dir == null || dir == Direction.NONE) && rand.nextBoolean()){
     			dir = directions[rand.nextInt(8)];

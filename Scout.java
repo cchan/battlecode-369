@@ -2,7 +2,6 @@ package team369;
 
 import battlecode.common.RobotInfo;
 import battlecode.common.RobotType;
-import battlecode.common.Signal;
 import battlecode.common.Team;
 import battlecode.common.Direction;
 import battlecode.common.GameConstants;
@@ -39,8 +38,12 @@ public class Scout extends Robot{
         		//todo - how would I bait a group of zombies to move with me toward the enemy team?
         	Direction dir = null;
         	
-    		if(hostileCount() > 2) //too dangerous, go away
+        	if(friendlyCount() == 0 && hostileHealthTotal() > 2000) //bait toward enemies if alone
+        		dir = rc.getLocation().directionTo(enemyHomeAreaLocation);
+        	else if(hostileCount() > 0) //enemies near, go away
     			dir = hostileDirection().opposite();
+    		else if(sa.allyBasicSignals.size() > 0) //help is needed, go there
+    			dir = rc.getLocation().directionTo(sa.allyBasicSignals.get(0).getLocation());
         	
         	if(dir == null || (dir == Direction.NONE && rand.nextBoolean()))
         		dir = directions[rand.nextInt(8)];

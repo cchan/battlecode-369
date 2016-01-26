@@ -28,6 +28,7 @@ public class RobotPlayer {
         		r = new Soldier(rc);
         		break;
         	case TURRET:
+        	case TTM:
         		r = new Turret(rc);
         		break;
         	case SCOUT:

@@ -42,15 +42,16 @@ public class SignalAdapter {
 			enemyMessageSignals = new ArrayList<>(), 
 			enemyBasicSignals = new ArrayList<>();
 	
-	private boolean isCommander;
+	private boolean isCommander = false;
 	public boolean isCommander(){return isCommander;}
 	public final int COMMANDER_VOTE_RANGE = 100;
 	public void sendCommanderVote() throws Exception{
-		if(rc.emptySignalQueue().length != 0)
-			throw new Exception("Signal queue not empty when sending commander vote.");
-		rc.broadcastSignal(COMMANDER_VOTE_RANGE);
-		if(rc.emptySignalQueue().length == 0)
-			isCommander = true;
+		broadcastCommand(Cmd.COMMANDER_VOTE,0,0,COMMANDER_VOTE_RANGE);
+		Signal[] sigs = rc.emptySignalQueue();
+		for(Signal s : sigs)
+			if(isCommand(s.getMessage(),Cmd.COMMANDER_VOTE))
+				return;
+		isCommander = true;
 	}
 	public SignalAdapter(RobotController rc){
 		this.rc = rc;
@@ -119,7 +120,7 @@ public class SignalAdapter {
 	private void broadcastCommand(Cmd cmd, int data1, int data2, int broadcastRange) throws GameActionException{
 		rc.broadcastMessageSignal((data1 | COMMAND_MASK) & ~(~cmd.ordinal() << COMMAND_REMAINING), data2, broadcastRange);
 	}
-	public static Cmd getCommand(int[] msg){
+	private static Cmd getCommand(int[] msg){
 		return Cmd.values()[msg[0] >>> COMMAND_REMAINING];
 	}
 	public static boolean isCommand(int[] msg, Cmd cmd){

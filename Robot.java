@@ -9,6 +9,7 @@ import battlecode.common.GameConstants;
 import battlecode.common.MapLocation;
 import battlecode.common.RobotController;
 import battlecode.common.RobotInfo;
+import battlecode.common.RobotType;
 import battlecode.common.Team;
 import battlecode.common.ZombieSpawnSchedule;
 
@@ -22,6 +23,8 @@ public abstract class Robot {
 	RobotController rc;
 	SignalAdapter sa;
 	ZombieSpawnSchedule zss;
+	MapLocation[] initialAllyLocs, initialEnemyLocs;
+	MapLocation enemyHomeAreaLocation, allyHomeAreaLocation;
 	
 	protected Robot(RobotController rc){
         rand = new Random(rc.getID());
@@ -32,6 +35,22 @@ public abstract class Robot {
         this.rc = rc;
         rc.emptySignalQueue(); //receives signals during construction, so get rid of those
 		zss = rc.getZombieSpawnSchedule();
+		initialAllyLocs = rc.getInitialArchonLocations(myTeam);
+		initialEnemyLocs = rc.getInitialArchonLocations(enemyTeam);
+		
+		int enemyLocIndex = 0, enemyLocXSum = 0,enemyLocYSum = 0;
+		for(; enemyLocIndex < initialEnemyLocs.length; enemyLocIndex++){
+			enemyLocXSum += initialEnemyLocs[enemyLocIndex].x;
+			enemyLocYSum += initialEnemyLocs[enemyLocIndex].y;
+		}
+		enemyHomeAreaLocation = new MapLocation(enemyLocXSum/enemyLocIndex, enemyLocYSum/enemyLocIndex);
+		
+		int allyLocIndex = 0, allyLocXSum = 0,allyLocYSum = 0;
+		for(; allyLocIndex < initialAllyLocs.length; allyLocIndex++){
+			allyLocXSum += initialAllyLocs[allyLocIndex].x;
+			allyLocYSum += initialAllyLocs[allyLocIndex].y;
+		}
+		allyHomeAreaLocation = new MapLocation(allyLocXSum/allyLocIndex, allyLocYSum/allyLocIndex);
 	}
 	public abstract void loop() throws Exception;
 	
@@ -126,9 +145,12 @@ public abstract class Robot {
 	}
 	public static RobotInfo nearest(MapLocation here, RobotInfo[] others){
 		if(others.length == 0)return null;
+		if(others.length == 1)return others[0];
+		
     	int shortestI = 0;
     	int shortestDistanceSquared = here.distanceSquaredTo(others[0].location);
     	for(int i = 1; i < others.length; i++){
+    		if(others[i].type==RobotType.ZOMBIEDEN)continue; //a paltry attempt at prioritization
     		int newdist = here.distanceSquaredTo(others[i].location);
     		if(shortestDistanceSquared > newdist){
     			shortestDistanceSquared = newdist;
@@ -157,7 +179,7 @@ public abstract class Robot {
 	public int patience = 30;
 	public void squishMove(Direction dir) throws GameActionException{
 		if(patience <= 0){
-			if(!clearIfRubble(dir) && rc.canMove(dir)){
+			if(!(rc.getType()!=RobotType.TTM && clearIfRubble(dir)) && rc.canMove(dir)){
 				rc.move(dir);
 				patience = Math.min(patience + 10, 30);
 			}
