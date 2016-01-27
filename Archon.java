@@ -15,7 +15,7 @@ public class Archon extends Robot {
 	RobotType[] subordOpeningBuild = {RobotType.GUARD, RobotType.VIPER, RobotType.GUARD, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.VIPER, RobotType.SOLDIER};
 	RobotType[] robotTypesBefore500 = {RobotType.SCOUT, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER, 
             RobotType.TURRET, RobotType.TURRET, RobotType.TURRET, RobotType.TURRET};
-	RobotType[] robotTypesAfter500 = {RobotType.SCOUT, RobotType.SCOUT, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.VIPER,
+	RobotType[] robotTypesAfter500 = {RobotType.SCOUT, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.SOLDIER, RobotType.VIPER,
             RobotType.TURRET, RobotType.TURRET};
 	
 	public Archon(RobotController rc){
@@ -99,6 +99,7 @@ public class Archon extends Robot {
             	RobotInfo[] neutrals = rc.senseNearbyRobots(10,Team.NEUTRAL);
             	MapLocation toMove = null;
             	
+            	////////////////todo - make this more effective
             	if(rc.getRoundNum() < zss.getRounds()[0]){//move only toward other archons until first zomb spawn
         			squishMove(rc.getLocation().directionTo(allyHomeAreaLocation));
         			return;

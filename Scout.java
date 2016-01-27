@@ -40,7 +40,7 @@ public class Scout extends Robot{
         	
         	if(friendlyCount() == 0 && hostileHealthTotal() > 2000) //bait toward enemies if alone
         		dir = rc.getLocation().directionTo(enemyHomeAreaLocation);
-        	else if(hostileCount() > 0) //enemies near, go away
+        	else if(hostileCount() > 1) //enemies near, go away
     			dir = hostileDirection().opposite();
     		else if(sa.allyBasicSignals.size() > 0) //help is needed, go there
     			dir = rc.getLocation().directionTo(sa.allyBasicSignals.get(0).getLocation());
